@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'system_creator.apps.SystemCreatorConfig',
+    'mfa',  # Add MFA app for integration
 ]
 
 MIDDLEWARE = [

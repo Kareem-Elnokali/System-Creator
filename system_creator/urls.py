@@ -2,7 +2,9 @@
 URL Configuration for System Creator Control Panel
 """
 from django.urls import path
-from . import views
+from . import views, api_security
+
+app_name = 'system_creator'
 
 urlpatterns = [
     # Main Views
@@ -17,4 +19,9 @@ urlpatterns = [
     path('api/tenant-stats/', views.api_tenant_stats, name='api_tenant_stats'),
     path('api/usage-trends/', views.api_usage_trends, name='api_usage_trends'),
     path('api/tenant-action/', views.api_tenant_action, name='api_tenant_action'),
+    
+    # Secure connection management endpoints (Admin only)
+    path('api/admin/tenant/<uuid:tenant_id>/disconnect/', api_security.disconnect_tenant, name='admin_disconnect_tenant'),
+    path('api/admin/tenant/<uuid:tenant_id>/connection-security/', api_security.modify_connection_security, name='modify_connection_security'),
+    path('api/tenant/<uuid:tenant_id>/connection-status/', api_security.get_connection_status, name='get_connection_status'),
 ]

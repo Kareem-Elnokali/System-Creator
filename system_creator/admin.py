@@ -10,7 +10,7 @@ from django.utils import timezone
 from datetime import timedelta
 from .models import (
     MFATenant, TenantFeatures, TenantUsageStats, 
-    TenantNotification, TenantAPILog, SystemSettings
+    TenantNotification, TenantAPILog, SystemSettings, MFASystemConnection
 )
 
 
@@ -327,3 +327,81 @@ class SystemSettingsAdmin(admin.ModelAdmin):
     
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(MFASystemConnection)
+class MFASystemConnectionAdmin(admin.ModelAdmin):
+    """Secure connection management - Only system admins can modify critical settings"""
+    
+    list_display = (
+        'tenant', 'is_connected', 'connection_status', 'admin_locked', 
+        'force_connection', 'can_disconnect', 'last_sync', 'total_users'
+    )
+    list_filter = ('is_connected', 'connection_status', 'admin_locked', 'force_connection', 'can_disconnect')
+    search_fields = ('tenant__name', 'tenant__domain')
+    readonly_fields = ('created_at', 'updated_at', 'last_sync')
+    
+    fieldsets = (
+        ('Connection Details', {
+            'fields': ('tenant', 'mfa_system_url', 'connection_key'),
+            'description': 'Basic connection information'
+        }),
+        ('Status', {
+            'fields': ('is_connected', 'connection_status', 'last_sync'),
+            'description': 'Current connection status and sync information'
+        }),
+        ('Security Controls', {
+            'fields': ('admin_locked', 'force_connection', 'can_disconnect'),
+            'description': 'IMPORTANT: These controls prevent tenants from disconnecting. '
+                          'admin_locked=True prevents ALL tenant modifications. '
+                          'force_connection=True prevents disconnection even if allowed. '
+                          'can_disconnect=False prevents tenant-initiated disconnection.'
+        }),
+        ('Statistics', {
+            'fields': ('total_users', 'active_users', 'total_authentications'),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_readonly_fields(self, request, obj=None):
+        """Restrict modification based on user permissions"""
+        readonly = list(self.readonly_fields)
+        
+        # Only superusers can modify security controls and connection details
+        if not request.user.is_superuser:
+            readonly.extend([
+                'mfa_system_url', 'connection_key', 'admin_locked', 
+                'force_connection', 'can_disconnect'
+            ])
+        return readonly
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only superusers can delete connections"""
+        return request.user.is_superuser
+    
+    def save_model(self, request, obj, form, change):
+        """Log connection changes for security audit"""
+        if change:
+            # Log who made changes to security settings
+            changes = []
+            if 'admin_locked' in form.changed_data:
+                changes.append(f"admin_locked: {obj.admin_locked}")
+            if 'force_connection' in form.changed_data:
+                changes.append(f"force_connection: {obj.force_connection}")
+            if 'can_disconnect' in form.changed_data:
+                changes.append(f"can_disconnect: {obj.can_disconnect}")
+            
+            if changes:
+                # Create audit log entry
+                TenantNotification.objects.create(
+                    tenant=obj.tenant,
+                    type='security',
+                    title='Connection Security Settings Modified',
+                    message=f'Admin {request.user.username} modified: {", ".join(changes)}'
+                )
+        
+        super().save_model(request, obj, form, change)

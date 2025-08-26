@@ -14,17 +14,21 @@ import json
 
 from .models import (
     MFATenant, TenantFeatures, TenantUsageStats, 
-    TenantNotification, TenantAPILog, SystemSettings
+    TenantNotification, TenantAPILog, SystemSettings, MFASystemConnection
 )
+from .integration import MFASystemIntegrator, get_system_health
 
 
 @staff_member_required
 def dashboard(request):
     """Main dashboard showing system overview"""
     
+    # Get real system health and stats
+    health_data = get_system_health()
+    
     # System stats
-    total_tenants = MFATenant.objects.count()
-    active_tenants = MFATenant.objects.filter(status='active').count()
+    total_tenants = health_data['total_tenants']
+    active_tenants = health_data['active_tenants']
     suspended_tenants = MFATenant.objects.filter(status='suspended').count()
     pending_tenants = MFATenant.objects.filter(status='pending').count()
     
@@ -36,19 +40,16 @@ def dashboard(request):
     recent_api_calls = TenantAPILog.objects.filter(timestamp__gte=last_24h).count()
     recent_registrations = MFATenant.objects.filter(created_at__gte=last_24h).count()
     
-    # Top tenants by usage
-    top_tenants = MFATenant.objects.annotate(
-        api_calls_count=Count('api_logs')
-    ).order_by('-api_calls_count')[:10]
+    # Top tenants by usage - sync with real MFA data
+    top_tenants = []
+    for tenant in MFATenant.objects.filter(status='active').order_by('-created_at')[:5]:
+        integrator = MFASystemIntegrator(tenant)
+        integrator.sync_tenant_data()  # Sync real data
+        tenant.api_calls_count = getattr(tenant.mfa_connection, 'total_authentications', 0) if hasattr(tenant, 'mfa_connection') else 0
+        top_tenants.append(tenant)
     
-    # System health indicators
-    error_rate = TenantAPILog.objects.filter(
-        timestamp__gte=last_24h,
-        status_code__gte=400
-    ).count()
-    
-    total_calls_24h = TenantAPILog.objects.filter(timestamp__gte=last_24h).count()
-    error_percentage = (error_rate / total_calls_24h * 100) if total_calls_24h > 0 else 0
+    # Use real system health data
+    error_percentage = health_data['error_rate']
     
     context = {
         'total_tenants': total_tenants,
@@ -60,7 +61,8 @@ def dashboard(request):
         'recent_registrations': recent_registrations,
         'top_tenants': top_tenants,
         'error_percentage': round(error_percentage, 2),
-        'system_health': 'good' if error_percentage < 5 else 'warning' if error_percentage < 15 else 'critical'
+        'system_health': health_data['health_status'],
+        'last_health_check': health_data['last_checked']
     }
     
     return render(request, 'system_creator/dashboard.html', context)

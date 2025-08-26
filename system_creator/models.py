@@ -241,18 +241,23 @@ class SystemSettings(models.Model):
 
 
 class MFASystemConnection(models.Model):
-    """Connection settings to the main MFA system"""
+    """Connection settings to the main MFA system - Only system admins can modify"""
     
     tenant = models.OneToOneField(MFATenant, on_delete=models.CASCADE, related_name='mfa_connection')
     
-    # Connection details
+    # Connection details - Protected from tenant modification
     mfa_system_url = models.URLField(help_text="URL of the MFA system API")
     connection_key = models.CharField(max_length=128, help_text="Key for connecting to MFA system")
     
-    # Status
+    # Status - Only system can modify
     is_connected = models.BooleanField(default=False)
     last_sync = models.DateTimeField(null=True, blank=True)
     connection_status = models.CharField(max_length=50, default='pending')
+    
+    # Security controls
+    can_disconnect = models.BooleanField(default=False, help_text="Only system admins can enable disconnection")
+    force_connection = models.BooleanField(default=True, help_text="Force connection - tenant cannot disable")
+    admin_locked = models.BooleanField(default=True, help_text="Connection locked by system administrator")
     
     # Statistics from MFA system
     total_users = models.PositiveIntegerField(default=0)
@@ -264,3 +269,11 @@ class MFASystemConnection(models.Model):
     
     def __str__(self):
         return f"MFA Connection for {self.tenant.name}"
+    
+    def can_tenant_modify(self):
+        """Check if tenant can modify this connection"""
+        return not self.admin_locked and self.can_disconnect
+    
+    def disconnect_allowed(self):
+        """Check if disconnection is allowed"""
+        return self.can_disconnect and not self.force_connection and not self.admin_locked
