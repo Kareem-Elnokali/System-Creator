@@ -1,0 +1,418 @@
+{% extends 'system_creator/base.html' %}
+
+{% block title %}Tenants - MFA System Creator{% endblock %}
+{% block page_title %}Tenant Management{% endblock %}
+
+{% block content %}
+<!-- Filters and Search -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="stat-card">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="">All Statuses</option>
+                        {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if current_filters.status == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Plan</label>
+                    <select name="plan" class="form-select">
+                        <option value="">All Plans</option>
+                        {% for value, label in plan_choices %}
+                        <option value="{{ value }}" {% if current_filters.plan == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Search</label>
+                    <input type="text" name="search" class="form-control" 
+                           placeholder="Search by name, domain, or owner..." 
+                           value="{{ current_filters.search }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search"></i> Filter
+                        </button>
+                        <a href="{% url 'tenant_list' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times"></i>
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Tenants Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0">
+                    <i class="fas fa-building text-primary"></i>
+                    Tenants ({{ tenants|length }})
+                </h6>
+                <div class="btn-group">
+                    <a href="/admin/system_creator/mfatenant/add/" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus"></i> Add Tenant
+                    </a>
+                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle dropdown-toggle-split" 
+                            data-bs-toggle="dropdown"></button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="bulkAction('activate')">
+                            <i class="fas fa-play text-success"></i> Bulk Activate
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="bulkAction('suspend')">
+                            <i class="fas fa-pause text-warning"></i> Bulk Suspend
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" onclick="exportTenants()">
+                            <i class="fas fa-download"></i> Export CSV
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th width="40">
+                                <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                            </th>
+                            <th>Tenant</th>
+                            <th>Domain</th>
+                            <th>Owner</th>
+                            <th>Plan</th>
+                            <th>Status</th>
+                            <th>Users</th>
+                            <th>Monthly Auths</th>
+                            <th>Health</th>
+                            <th>Created</th>
+                            <th width="120">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tenant in tenants %}
+                        <tr>
+                            <td>
+                                <input type="checkbox" class="tenant-checkbox" value="{{ tenant.id }}">
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="me-3">
+                                        <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" 
+                                             style="width: 36px; height: 36px; font-size: 0.875rem;">
+                                            {{ tenant.name|first|upper }}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="fw-semibold">{{ tenant.name }}</div>
+                                        <small class="text-muted">{{ tenant.contact_name }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <code class="small">{{ tenant.domain }}</code>
+                                {% if tenant.additional_domains %}
+                                <br><small class="text-muted">+{{ tenant.additional_domains|length }} more</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div>{{ tenant.owner.get_full_name|default:tenant.owner.username }}</div>
+                                <small class="text-muted">{{ tenant.contact_email }}</small>
+                            </td>
+                            <td>
+                                <span class="plan-badge plan-{{ tenant.plan }}">
+                                    {{ tenant.get_plan_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="status-badge status-{{ tenant.status }}">
+                                    {{ tenant.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="text-center">
+                                    <div class="fw-semibold">{{ tenant.current_users_count }}</div>
+                                    <div class="progress mt-1" style="height: 4px;">
+                                        {% widthratio tenant.current_users_count tenant.max_users 100 as usage_percent %}
+                                        <div class="progress-bar bg-{% if usage_percent > 90 %}danger{% elif usage_percent > 75 %}warning{% else %}success{% endif %}" 
+                                             style="width: {{ usage_percent }}%"></div>
+                                    </div>
+                                    <small class="text-muted">/ {{ tenant.max_users }}</small>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="text-center">
+                                    <div class="fw-semibold">{{ tenant.current_month_auths|floatformat:0 }}</div>
+                                    <div class="progress mt-1" style="height: 4px;">
+                                        {% widthratio tenant.current_month_auths tenant.max_monthly_authentications 100 as auth_percent %}
+                                        <div class="progress-bar bg-{% if auth_percent > 90 %}danger{% elif auth_percent > 75 %}warning{% else %}info{% endif %}" 
+                                             style="width: {{ auth_percent }}%"></div>
+                                    </div>
+                                    <small class="text-muted">/ {{ tenant.max_monthly_authentications|floatformat:0 }}</small>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="health-indicator">
+                                    <span class="health-dot health-{% if tenant.status == 'active' %}good{% elif tenant.status == 'suspended' %}critical{% else %}warning{% endif %}"></span>
+                                    {% if tenant.status == 'active' %}
+                                        Healthy
+                                    {% elif tenant.status == 'suspended' %}
+                                        Suspended
+                                    {% else %}
+                                        {{ tenant.get_status_display }}
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <div>{{ tenant.created_at|date:"M d, Y" }}</div>
+                                <small class="text-muted">{{ tenant.created_at|timesince }} ago</small>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'tenant_detail' tenant.id %}" class="btn btn-outline-primary" title="View Details">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split" 
+                                            data-bs-toggle="dropdown"></button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="{% url 'tenant_features' tenant.id %}">
+                                            <i class="fas fa-cog"></i> Features
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="/admin/system_creator/mfatenant/{{ tenant.id }}/change/">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        {% if tenant.status == 'active' %}
+                                        <li><a class="dropdown-item text-warning" href="#" onclick="suspendTenant('{{ tenant.id }}')">
+                                            <i class="fas fa-pause"></i> Suspend
+                                        </a></li>
+                                        {% elif tenant.status == 'suspended' %}
+                                        <li><a class="dropdown-item text-success" href="#" onclick="activateTenant('{{ tenant.id }}')">
+                                            <i class="fas fa-play"></i> Activate
+                                        </a></li>
+                                        {% endif %}
+                                        <li><a class="dropdown-item" href="#" onclick="regenerateKeys('{{ tenant.id }}')">
+                                            <i class="fas fa-key"></i> Regenerate Keys
+                                        </a></li>
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="11" class="text-center text-muted py-5">
+                                <i class="fas fa-inbox fa-3x mb-3"></i><br>
+                                <h6>No tenants found</h6>
+                                <p class="mb-3">{% if current_filters.search or current_filters.status or current_filters.plan %}
+                                    Try adjusting your filters or <a href="{% url 'tenant_list' %}">clear all filters</a>
+                                {% else %}
+                                    Get started by creating your first tenant
+                                {% endif %}</p>
+                                <a href="/admin/system_creator/mfatenant/add/" class="btn btn-primary">
+                                    <i class="fas fa-plus"></i> Create First Tenant
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Select All functionality
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.tenant-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAll.checked);
+}
+
+// Get selected tenant IDs
+function getSelectedTenants() {
+    return Array.from(document.querySelectorAll('.tenant-checkbox:checked')).map(cb => cb.value);
+}
+
+// Bulk Actions
+function bulkAction(action) {
+    const selected = getSelectedTenants();
+    if (selected.length === 0) {
+        showToast('Please select at least one tenant', 'warning');
+        return;
+    }
+    
+    const actionText = action === 'activate' ? 'activate' : 'suspend';
+    if (confirm(`Are you sure you want to ${actionText} ${selected.length} tenant(s)?`)) {
+        Promise.all(selected.map(tenantId => 
+            fetch('{% url "api_tenant_action" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    tenant_id: tenantId,
+                    action: action
+                })
+            })
+        ))
+        .then(responses => Promise.all(responses.map(r => r.json())))
+        .then(results => {
+            const successful = results.filter(r => r.success).length;
+            const failed = results.length - successful;
+            
+            if (successful > 0) {
+                showToast(`Successfully ${actionText}d ${successful} tenant(s)`, 'success');
+            }
+            if (failed > 0) {
+                showToast(`Failed to ${actionText} ${failed} tenant(s)`, 'danger');
+            }
+            
+            setTimeout(() => location.reload(), 1000);
+        })
+        .catch(error => {
+            showToast('Network error occurred', 'danger');
+        });
+    }
+}
+
+// Individual Actions
+function activateTenant(tenantId) {
+    if (confirm('Are you sure you want to activate this tenant?')) {
+        fetch('{% url "api_tenant_action" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                tenant_id: tenantId,
+                action: 'activate'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.error || 'Action failed', 'danger');
+            }
+        })
+        .catch(error => {
+            showToast('Network error occurred', 'danger');
+        });
+    }
+}
+
+function suspendTenant(tenantId) {
+    if (confirm('Are you sure you want to suspend this tenant? This will disable their MFA service.')) {
+        fetch('{% url "api_tenant_action" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                tenant_id: tenantId,
+                action: 'suspend'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'warning');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.error || 'Action failed', 'danger');
+            }
+        })
+        .catch(error => {
+            showToast('Network error occurred', 'danger');
+        });
+    }
+}
+
+function regenerateKeys(tenantId) {
+    if (confirm('Are you sure you want to regenerate API keys? The tenant will need to update their integration.')) {
+        fetch('{% url "api_tenant_action" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                tenant_id: tenantId,
+                action: 'regenerate_keys'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'info');
+                // Optionally show the new API key in a modal
+                if (data.tenant.api_key) {
+                    alert(`New API Key: ${data.tenant.api_key}\n\nPlease save this key securely. It won't be shown again.`);
+                }
+            } else {
+                showToast(data.error || 'Action failed', 'danger');
+            }
+        })
+        .catch(error => {
+            showToast('Network error occurred', 'danger');
+        });
+    }
+}
+
+function exportTenants() {
+    const selected = getSelectedTenants();
+    let url = '/admin/system_creator/mfatenant/?';
+    
+    if (selected.length > 0) {
+        url += 'id__in=' + selected.join(',') + '&';
+    }
+    
+    // Add current filters
+    const params = new URLSearchParams(window.location.search);
+    params.forEach((value, key) => {
+        if (key !== 'page') {
+            url += `${key}=${encodeURIComponent(value)}&`;
+        }
+    });
+    
+    url += 'export=csv';
+    window.open(url, '_blank');
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    // Update select all checkbox when individual checkboxes change
+    document.querySelectorAll('.tenant-checkbox').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const total = document.querySelectorAll('.tenant-checkbox').length;
+            const checked = document.querySelectorAll('.tenant-checkbox:checked').length;
+            const selectAll = document.getElementById('selectAll');
+            
+            selectAll.checked = checked === total;
+            selectAll.indeterminate = checked > 0 && checked < total;
+        });
+    });
+});
+</script>
+{% endblock %}

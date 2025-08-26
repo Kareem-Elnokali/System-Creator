@@ -1,0 +1,40 @@
+# Core Django Framework
+Django==5.2.5
+asgiref==3.9.1
+sqlparse==0.5.3
+tzdata==2025.2
+
+# HTTP Client for MFA API Integration
+requests==2.32.4
+urllib3==2.5.0
+certifi==2025.8.3
+charset-normalizer==3.4.3
+idna==3.10
+
+# Environment Configuration
+python-dotenv==1.0.0
+
+# Database Support
+# For PostgreSQL (recommended for production)
+psycopg2-binary==2.9.9
+
+# For MySQL (alternative)
+# mysqlclient==2.2.4
+
+# Web Server and Static Files
+gunicorn==21.2.0
+whitenoise==6.5.0
+
+# Security and Utilities
+cryptography==45.0.6
+PyJWT==2.10.1
+python-dateutil==2.9.0.post0
+pytz==2025.2
+
+# Optional: For enhanced admin interface
+# django-admin-interface==0.28.8
+# django-colorfield==0.11.0
+
+# Development and Testing (comment out for production)
+# django-debug-toolbar==4.2.0
+# pytest-django==4.8.0

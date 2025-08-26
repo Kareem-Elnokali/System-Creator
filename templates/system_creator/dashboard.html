@@ -1,0 +1,330 @@
+{% extends 'system_creator/base.html' %}
+
+{% block title %}Dashboard - MFA System Creator{% endblock %}
+{% block page_title %}System Overview Dashboard{% endblock %}
+
+{% block content %}
+<!-- System Health Alert -->
+{% if system_health == 'critical' %}
+<div class="alert alert-danger" role="alert">
+    <i class="fas fa-exclamation-triangle"></i>
+    <strong>System Alert:</strong> High error rate detected ({{ error_percentage }}%). Immediate attention required.
+</div>
+{% elif system_health == 'warning' %}
+<div class="alert alert-warning" role="alert">
+    <i class="fas fa-exclamation-circle"></i>
+    <strong>System Warning:</strong> Elevated error rate ({{ error_percentage }}%). Monitor closely.
+</div>
+{% endif %}
+
+<!-- Key Metrics Row -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="stat-card">
+            <div class="stat-number text-primary">{{ total_tenants }}</div>
+            <div class="stat-label">Total Tenants</div>
+            <small class="text-muted">
+                <i class="fas fa-plus text-success"></i> {{ recent_registrations }} new today
+            </small>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="stat-card">
+            <div class="stat-number text-success">{{ active_tenants }}</div>
+            <div class="stat-label">Active Tenants</div>
+            <small class="text-muted">
+                {{ active_tenants|floatformat:0 }}% of total
+            </small>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="stat-card">
+            <div class="stat-number text-info">{{ recent_api_calls|floatformat:0 }}</div>
+            <div class="stat-label">API Calls (24h)</div>
+            <small class="text-muted">
+                <span class="health-indicator">
+                    <span class="health-dot health-{% if system_health == 'good' %}good{% elif system_health == 'warning' %}warning{% else %}critical{% endif %}"></span>
+                    {{ error_percentage }}% errors
+                </span>
+            </small>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="stat-card">
+            <div class="stat-number text-warning">{{ suspended_tenants }}</div>
+            <div class="stat-label">Suspended</div>
+            <small class="text-muted">
+                {{ pending_tenants }} pending setup
+            </small>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    <!-- Plan Distribution -->
+    <div class="col-md-6 mb-3">
+        <div class="stat-card">
+            <h6 class="mb-3">
+                <i class="fas fa-chart-pie text-primary"></i>
+                Plan Distribution
+            </h6>
+            <div class="chart-container">
+                <canvas id="planChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- System Health -->
+    <div class="col-md-6 mb-3">
+        <div class="stat-card">
+            <h6 class="mb-3">
+                <i class="fas fa-heartbeat text-danger"></i>
+                System Health
+            </h6>
+            <div class="row">
+                <div class="col-6">
+                    <div class="text-center">
+                        <div class="stat-number text-{% if error_percentage < 5 %}success{% elif error_percentage < 15 %}warning{% else %}danger{% endif %}">
+                            {{ error_percentage }}%
+                        </div>
+                        <div class="stat-label">Error Rate</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="text-center">
+                        <div class="stat-number text-info">
+                            {{ recent_api_calls|floatformat:0 }}
+                        </div>
+                        <div class="stat-label">Total Requests</div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3">
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar bg-{% if error_percentage < 5 %}success{% elif error_percentage < 15 %}warning{% else %}danger{% endif %}" 
+                         style="width: {{ error_percentage }}%"></div>
+                </div>
+                <small class="text-muted">Last 24 hours</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Tenants Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0">
+                    <i class="fas fa-trophy text-warning"></i>
+                    Top Active Tenants
+                </h6>
+                <a href="{% url 'tenant_list' %}" class="btn btn-outline-primary btn-sm">
+                    View All <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Tenant</th>
+                            <th>Domain</th>
+                            <th>Plan</th>
+                            <th>Status</th>
+                            <th>API Calls</th>
+                            <th>Health</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tenant in top_tenants %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="me-3">
+                                        <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" 
+                                             style="width: 32px; height: 32px; font-size: 0.75rem;">
+                                            {{ tenant.name|first|upper }}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="fw-semibold">{{ tenant.name }}</div>
+                                        <small class="text-muted">{{ tenant.owner.get_full_name|default:tenant.owner.username }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <code>{{ tenant.domain }}</code>
+                            </td>
+                            <td>
+                                <span class="plan-badge plan-{{ tenant.plan }}">
+                                    {{ tenant.get_plan_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="status-badge status-{{ tenant.status }}">
+                                    {{ tenant.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="fw-semibold">{{ tenant.api_calls_count|floatformat:0 }}</span>
+                            </td>
+                            <td>
+                                <span class="health-indicator">
+                                    <span class="health-dot health-{% if tenant.status == 'active' %}good{% else %}warning{% endif %}"></span>
+                                    {% if tenant.status == 'active' %}Healthy{% else %}Inactive{% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'tenant_detail' tenant.id %}" class="btn btn-outline-primary">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split" 
+                                            data-bs-toggle="dropdown"></button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="{% url 'tenant_features' tenant.id %}">
+                                            <i class="fas fa-cog"></i> Features
+                                        </a></li>
+                                        {% if tenant.status == 'active' %}
+                                        <li><a class="dropdown-item text-warning" href="#" onclick="suspendTenant('{{ tenant.id }}')">
+                                            <i class="fas fa-pause"></i> Suspend
+                                        </a></li>
+                                        {% else %}
+                                        <li><a class="dropdown-item text-success" href="#" onclick="activateTenant('{{ tenant.id }}')">
+                                            <i class="fas fa-play"></i> Activate
+                                        </a></li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                                No tenants found. <a href="/admin/system_creator/mfatenant/add/">Create your first tenant</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Plan Distribution Chart
+const planCtx = document.getElementById('planChart').getContext('2d');
+const planData = {
+    labels: [{% for plan in plan_stats %}'{{ plan.plan|title }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+    datasets: [{
+        data: [{% for plan in plan_stats %}{{ plan.count }}{% if not forloop.last %},{% endif %}{% endfor %}],
+        backgroundColor: [
+            '#64748b', // Free - Gray
+            '#2563eb', // Basic - Blue  
+            '#d97706', // Premium - Orange
+            '#7c3aed'  // Enterprise - Purple
+        ],
+        borderWidth: 2,
+        borderColor: '#fff'
+    }]
+};
+
+new Chart(planCtx, {
+    type: 'doughnut',
+    data: planData,
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    padding: 20,
+                    usePointStyle: true
+                }
+            }
+        }
+    }
+});
+
+// Tenant Actions
+function activateTenant(tenantId) {
+    if (confirm('Are you sure you want to activate this tenant?')) {
+        fetch('{% url "api_tenant_action" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                tenant_id: tenantId,
+                action: 'activate'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.error || 'Action failed', 'danger');
+            }
+        })
+        .catch(error => {
+            showToast('Network error occurred', 'danger');
+        });
+    }
+}
+
+function suspendTenant(tenantId) {
+    if (confirm('Are you sure you want to suspend this tenant? This will disable their MFA service.')) {
+        fetch('{% url "api_tenant_action" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                tenant_id: tenantId,
+                action: 'suspend'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'warning');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.error || 'Action failed', 'danger');
+            }
+        })
+        .catch(error => {
+            showToast('Network error occurred', 'danger');
+        });
+    }
+}
+
+// Real-time updates
+function updateDashboardData() {
+    fetch('{% url "api_tenant_stats" %}')
+        .then(response => response.json())
+        .then(data => {
+            // Update stat cards if needed
+            console.log('Dashboard data updated', data);
+        })
+        .catch(error => console.error('Failed to update dashboard:', error));
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    // Add any initialization code here
+});
+</script>
+{% endblock %}
